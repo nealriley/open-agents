@@ -20,6 +20,7 @@ import {
   GitCompare,
   Paperclip,
   Loader2,
+  Mic,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ import { CreateRepoDialog } from "@/components/create-repo-dialog";
 import { ImageAttachmentsPreview } from "@/components/image-attachments-preview";
 import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom";
 import { useImageAttachments } from "@/hooks/use-image-attachments";
+import { useAudioRecording } from "@/hooks/use-audio-recording";
 import { ACCEPT_IMAGE_TYPES, isValidImageType } from "@/lib/image-utils";
 import type { WebAgentUIToolPart, WebAgentUIMessagePart } from "@/app/types";
 import type { TaskToolUIPart } from "@open-harness/agent";
@@ -372,7 +374,52 @@ export function TaskDetailContent() {
   const [showDiffPanel, setShowDiffPanel] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const {
+    state: recordingState,
+    error: recordingError,
+    clearError: clearRecordingError,
+    toggleRecording,
+  } = useAudioRecording();
+
+  const handleMicClick = async () => {
+    clearRecordingError();
+    const transcribedText = await toggleRecording();
+    if (transcribedText) {
+      setInput((prev) =>
+        prev ? `${prev} ${transcribedText}` : transcribedText,
+      );
+      inputRef.current?.focus();
+    }
+  };
+
+  // Auto-resize textarea up to 3 lines
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+
+    const computedStyle = getComputedStyle(textarea);
+    const lineHeight = parseFloat(computedStyle.lineHeight) || 24;
+    const maxLines = 3;
+    const maxHeight = lineHeight * maxLines;
+
+    // Store current height to avoid flicker
+    const currentHeight = textarea.offsetHeight;
+
+    // Temporarily set height to 0 to measure scrollHeight accurately
+    textarea.style.height = "0";
+    const scrollHeight = textarea.scrollHeight;
+
+    // Set new height, capped at max
+    const newHeight = Math.min(scrollHeight, maxHeight);
+
+    // Only update if height actually changed to minimize reflows
+    if (Math.abs(newHeight - currentHeight) > 1) {
+      textarea.style.height = `${newHeight}px`;
+    } else {
+      textarea.style.height = `${currentHeight}px`;
+    }
+  }, [input]);
 
   const {
     images,
@@ -1155,54 +1202,7 @@ export function TaskDetailContent() {
               }}
               className="hidden"
             />
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const hasContent = input.trim() || images.length > 0;
-                if (!hasContent || !isSandboxValid(sandboxInfo)) return;
-
-                const messageText = input;
-                const files = getFileParts();
-                setInput("");
-                clearImages();
-
-                sendMessage({ text: messageText, files });
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragLeave={(e) => {
-                e.preventDefault();
-                // Only set isDragging to false if we're leaving the form entirely
-                // (not just moving to a child element)
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                  setIsDragging(false);
-                }
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                setIsDragging(false);
-                const files = e.dataTransfer.files;
-                if (files.length > 0) {
-                  addImages(files);
-                }
-              }}
-              className={`relative overflow-hidden rounded-2xl bg-muted transition-colors ${isDragging ? "ring-2 ring-blue-500/50" : ""}`}
-            >
-              {/* Sandbox overlay when inactive */}
-              <SandboxInputOverlay
-                sandboxInfo={sandboxInfo}
-                isCreating={isCreatingSandbox}
-                isRestoring={isRestoringSnapshot}
-                hasSnapshot={!!task.snapshotUrl}
-                onRestore={handleRestoreSnapshot}
-                onCreateNew={handleCreateNewSandbox}
-              />
-
-              {/* Image attachments preview */}
-              <ImageAttachmentsPreview images={images} onRemove={removeImage} />
-
+            <div className="relative">
               {showSuggestions && (
                 <FileSuggestionsDropdown
                   suggestions={suggestions}
@@ -1219,81 +1219,171 @@ export function TaskDetailContent() {
                   isLoading={fileCache.isLoading}
                 />
               )}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const hasContent = input.trim() || images.length > 0;
+                  if (!hasContent || !isSandboxValid(sandboxInfo)) return;
 
-              <div className="flex items-center gap-2 px-4 py-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={openFilePicker}
-                  className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
-                >
-                  <Paperclip className="h-4 w-4" />
-                </Button>
-                <input
-                  ref={inputRef}
-                  value={input}
-                  placeholder="Request changes or ask a ..."
-                  onChange={(e) => {
-                    setInput(e.currentTarget.value);
-                    setCursorPosition(e.currentTarget.selectionStart ?? 0);
-                  }}
-                  onKeyDown={(e) => {
-                    // Let suggestions handle keyboard events first
-                    if (handleSuggestionsKeyDown(e)) {
-                      return;
-                    }
-                    // Handle form submission
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      e.currentTarget.form?.requestSubmit();
-                    }
-                  }}
-                  onKeyUp={(e) => {
-                    setCursorPosition(e.currentTarget.selectionStart ?? 0);
-                  }}
-                  onClick={(e) => {
-                    setCursorPosition(e.currentTarget.selectionStart ?? 0);
-                  }}
-                  onPaste={(e) => {
-                    const items = e.clipboardData?.items;
-                    if (!items) return;
-                    for (const item of items) {
-                      if (isValidImageType(item.type)) {
-                        const file = item.getAsFile();
-                        if (file) {
-                          e.preventDefault();
-                          addImage(file).catch(() => {
-                            // Silently ignore paste errors - rare edge case
-                          });
+                  const messageText = input;
+                  const files = getFileParts();
+                  setInput("");
+                  clearImages();
+
+                  sendMessage({ text: messageText, files });
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  // Only set isDragging to false if we're leaving the form entirely
+                  // (not just moving to a child element)
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setIsDragging(false);
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  const files = e.dataTransfer.files;
+                  if (files.length > 0) {
+                    addImages(files);
+                  }
+                }}
+                className={`overflow-hidden rounded-2xl bg-muted transition-colors ${isDragging ? "ring-2 ring-blue-500/50" : ""}`}
+              >
+                {/* Sandbox overlay when inactive */}
+                <SandboxInputOverlay
+                  sandboxInfo={sandboxInfo}
+                  isCreating={isCreatingSandbox}
+                  isRestoring={isRestoringSnapshot}
+                  hasSnapshot={!!task.snapshotUrl}
+                  onRestore={handleRestoreSnapshot}
+                  onCreateNew={handleCreateNewSandbox}
+                />
+
+                {/* Image attachments preview */}
+                <ImageAttachmentsPreview
+                  images={images}
+                  onRemove={removeImage}
+                />
+
+                {/* Textarea area */}
+                <div className="px-4 pb-2 pt-3">
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    placeholder="Request changes or ask a question..."
+                    rows={1}
+                    onChange={(e) => {
+                      setInput(e.currentTarget.value);
+                      setCursorPosition(e.currentTarget.selectionStart ?? 0);
+                    }}
+                    onKeyDown={(e) => {
+                      // Let suggestions handle keyboard events first
+                      if (handleSuggestionsKeyDown(e)) {
+                        return;
+                      }
+                      // Handle form submission
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        e.currentTarget.form?.requestSubmit();
+                      }
+                    }}
+                    onKeyUp={(e) => {
+                      setCursorPosition(e.currentTarget.selectionStart ?? 0);
+                    }}
+                    onClick={(e) => {
+                      setCursorPosition(e.currentTarget.selectionStart ?? 0);
+                    }}
+                    onPaste={(e) => {
+                      const items = e.clipboardData?.items;
+                      if (!items) return;
+                      for (const item of items) {
+                        if (isValidImageType(item.type)) {
+                          const file = item.getAsFile();
+                          if (file) {
+                            e.preventDefault();
+                            addImage(file).catch(() => {
+                              // Silently ignore paste errors - rare edge case
+                            });
+                          }
                         }
                       }
-                    }
-                  }}
-                  disabled={status === "streaming"}
-                  className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none"
-                />
-                {status === "streaming" ? (
+                    }}
+                    disabled={status === "streaming"}
+                    className="w-full resize-none overflow-y-auto bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none"
+                    style={{ minHeight: "24px" }}
+                  />
+                </div>
+
+                {/* Bottom toolbar */}
+                <div className="flex items-center justify-between px-3 pb-2">
                   <Button
                     type="button"
+                    variant="ghost"
                     size="icon"
-                    onClick={stop}
-                    className="h-8 w-8 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={openFilePicker}
+                    className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
                   >
-                    <Square className="h-3 w-3 fill-current" />
+                    <Paperclip className="h-4 w-4" />
                   </Button>
-                ) : (
-                  <Button
-                    type="submit"
-                    size="icon"
-                    disabled={!input.trim() && images.length === 0}
-                    className="h-8 w-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30"
-                  >
-                    <ArrowUp className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            </form>
+
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleMicClick}
+                      disabled={recordingState === "processing"}
+                      className={`relative h-8 w-8 rounded-full ${
+                        recordingState === "recording"
+                          ? "text-red-500"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {recordingState === "recording" && (
+                        <span className="absolute inset-0 animate-pulse rounded-full bg-red-500/30" />
+                      )}
+                      {recordingState === "processing" ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <Mic className="h-5 w-5" />
+                      )}
+                    </Button>
+
+                    {status === "streaming" ? (
+                      <Button
+                        type="button"
+                        size="icon"
+                        onClick={stop}
+                        className="h-8 w-8 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        <Square className="h-3 w-3 fill-current" />
+                      </Button>
+                    ) : (
+                      <Button
+                        type="submit"
+                        size="icon"
+                        disabled={!input.trim() && images.length === 0}
+                        className="h-8 w-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30"
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </form>
+
+              {/* Recording error message */}
+              {recordingError && (
+                <p className="mt-2 text-sm text-destructive">
+                  {recordingError}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>
