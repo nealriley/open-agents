@@ -2,11 +2,8 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import type { WebAgentUIMessage } from "@/app/types";
 import { DiffsProvider } from "@/components/diffs-provider";
-import {
-  getChatById,
-  getChatMessages,
-  getSessionById,
-} from "@/lib/db/sessions";
+import { getChatById, getChatMessages } from "@/lib/db/sessions";
+import { getSessionByIdCached } from "@/lib/db/sessions-cache";
 import { getServerSession } from "@/lib/session/get-server-session";
 import { SessionChatContent } from "./session-chat-content";
 import { SessionChatProvider } from "./session-chat-context";
@@ -63,14 +60,18 @@ export default async function SessionChatPage({
 }: SessionChatPageProps) {
   const { sessionId, chatId } = await params;
 
+  // Start independent fetches in parallel
+  const sessionPromise = getServerSession();
+  const sessionRecordPromise = getSessionByIdCached(sessionId);
+
   // Server-side auth check
-  const session = await getServerSession();
+  const session = await sessionPromise;
   if (!session?.user) {
     redirect("/");
   }
 
-  // Fetch session + chat
-  const sessionRecord = await getSessionById(sessionId);
+  // Fetch session record
+  const sessionRecord = await sessionRecordPromise;
   if (!sessionRecord) {
     notFound();
   }
@@ -80,22 +81,28 @@ export default async function SessionChatPage({
     redirect("/");
   }
 
-  const chat = await getChatByIdWithRetry(chatId, sessionId);
+  // Fetch chat and messages in parallel
+  const [chat, dbMessages] = await Promise.all([
+    getChatByIdWithRetry(chatId, sessionId),
+    getChatMessages(chatId),
+  ]);
   if (!chat) {
     if (isOptimisticChatId(chatId)) {
       redirect(`/sessions/${sessionId}`);
     }
     notFound();
   }
-
-  // Fetch messages and transform to WebAgentUIMessage[]
-  const dbMessages = await getChatMessages(chatId);
   const initialMessages = dbMessages.map((m) => m.parts as WebAgentUIMessage);
+  const sessionForClient = {
+    ...sessionRecord,
+    cachedDiff: null,
+    cachedDiffUpdatedAt: null,
+  };
 
   return (
     <DiffsProvider>
       <SessionChatProvider
-        session={sessionRecord}
+        session={sessionForClient}
         chat={chat}
         initialMessages={initialMessages}
       >

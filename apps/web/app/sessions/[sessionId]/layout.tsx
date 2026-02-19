@@ -1,13 +1,18 @@
 import { notFound, redirect } from "next/navigation";
-import { getChatsBySessionId } from "@/lib/db/sessions";
+import type { ReactNode } from "react";
 import { getSessionByIdCached } from "@/lib/db/sessions-cache";
 import { getServerSession } from "@/lib/session/get-server-session";
+import { SessionLayoutShell } from "./session-layout-shell";
 
-interface SessionPageProps {
+interface SessionLayoutProps {
   params: Promise<{ sessionId: string }>;
+  children: ReactNode;
 }
 
-export default async function SessionPage({ params }: SessionPageProps) {
+export default async function SessionLayout({
+  params,
+  children,
+}: SessionLayoutProps) {
   const { sessionId } = await params;
 
   const sessionPromise = getServerSession();
@@ -27,12 +32,7 @@ export default async function SessionPage({ params }: SessionPageProps) {
     redirect("/");
   }
 
-  const chats = await getChatsBySessionId(sessionId);
-  const targetChat = chats[0];
-
-  if (!targetChat) {
-    notFound();
-  }
-
-  redirect(`/sessions/${sessionId}/chats/${targetChat.id}`);
+  return (
+    <SessionLayoutShell session={sessionRecord}>{children}</SessionLayoutShell>
+  );
 }
