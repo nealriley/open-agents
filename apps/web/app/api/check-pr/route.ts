@@ -96,6 +96,12 @@ export async function POST(req: Request) {
       });
     }
 
+    // After a branch change the DB was cleared but sessionRecord is stale.
+    // Use null when the branch changed so we never return PR info from
+    // the previous branch.
+    const currentPrNumber = branchChanged ? null : sessionRecord.prNumber;
+    const currentPrStatus = branchChanged ? null : sessionRecord.prStatus;
+
     // 3. Check GitHub for an existing PR on this branch
     let token: string | undefined;
     try {
@@ -108,8 +114,8 @@ export async function POST(req: Request) {
       // No token available -- return existing PR info if we have it
       return Response.json({
         branch,
-        prNumber: sessionRecord.prNumber ?? null,
-        prStatus: sessionRecord.prStatus ?? null,
+        prNumber: currentPrNumber ?? null,
+        prStatus: currentPrStatus ?? null,
       });
     }
 
@@ -123,8 +129,8 @@ export async function POST(req: Request) {
     if (prResult.found && prResult.prNumber && prResult.prStatus) {
       // Only update DB if PR info actually changed
       const prChanged =
-        prResult.prNumber !== sessionRecord.prNumber ||
-        prResult.prStatus !== sessionRecord.prStatus;
+        prResult.prNumber !== currentPrNumber ||
+        prResult.prStatus !== currentPrStatus;
 
       if (prChanged) {
         await updateSession(sessionId, {
