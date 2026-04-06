@@ -185,7 +185,15 @@ function getSessionStatusLabel(session: SessionWithUnread): {
 }
 
 function getSessionBranchUrl(session: SessionWithUnread): string | null {
-  if (!session.branch || !session.repoOwner || !session.repoName) return null;
+  // Only link if the branch is known to exist on GitHub (has a PR).
+  // Local-only branches that haven't been pushed would 404.
+  if (
+    !session.branch ||
+    !session.repoOwner ||
+    !session.repoName ||
+    !session.prNumber
+  )
+    return null;
   return `https://github.com/${session.repoOwner}/${session.repoName}/tree/${session.branch}`;
 }
 
