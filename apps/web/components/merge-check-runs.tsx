@@ -5,7 +5,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Ellipsis,
   List,
   ArrowUpDown,
   Loader2,
@@ -30,11 +29,17 @@ const stateOrder: Record<PullRequestCheckState, number> = {
   passed: 2,
 };
 
-const stateLabels: Record<PullRequestCheckState, string> = {
-  failed: "Failing",
-  pending: "Running",
-  passed: "Passed",
-};
+function groupLabel(state: PullRequestCheckState, count: number): string {
+  const s = count === 1 ? "" : "s";
+  switch (state) {
+    case "failed":
+      return `${count} failing check${s}`;
+    case "pending":
+      return `${count} pending check${s}`;
+    case "passed":
+      return `${count} passing check${s}`;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /*  Header status icon                                                 */
@@ -121,7 +126,7 @@ function HeaderStatusIcon({
 /*  Individual check row icon                                          */
 /*  - passed  → simple check (✓)                                       */
 /*  - failed  → simple X                                               */
-/*  - pending → ellipsis (…)                                           */
+/*  - pending → spinner                                                */
 /* ------------------------------------------------------------------ */
 
 function CheckStateIcon({
@@ -144,9 +149,9 @@ function CheckStateIcon({
   }
   if (state === "pending") {
     return (
-      <Ellipsis
+      <Loader2
         className={cn(
-          "h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500",
+          "h-4 w-4 shrink-0 animate-spin text-amber-600 dark:text-amber-500",
           className,
         )}
       />
@@ -225,13 +230,10 @@ function GroupSection({
         ) : (
           <ChevronRight className="h-3 w-3 shrink-0" />
         )}
-        <CheckStateIcon state={state} className="h-3.5 w-3.5" />
-        <span>
-          {stateLabels[state]} ({checkRuns.length})
-        </span>
+        <span>{groupLabel(state, checkRuns.length)}</span>
       </button>
       {open && (
-        <ul className="ml-5 space-y-0.5">
+        <ul className="ml-4 space-y-0.5">
           {checkRuns.map((cr, i) => (
             <li key={`${cr.name}-${cr.detailsUrl ?? "no-url"}-${i}`}>
               <CheckRunRow checkRun={cr} />
@@ -392,36 +394,35 @@ export function CheckRunsList({
       </button>
 
       {/* ---- Expanded detail list ---- */}
-      {detailsOpen && (
-        <div className="border-t border-border px-3 pb-3 pt-2">
-          {/* Sort/group toggle – inside the list, top-right */}
+      {detailsOpen && !showLoading && (
+        <div className="relative border-t border-border px-3 pb-3 pt-2">
+          {/* Sort/group toggle – absolutely positioned, floats top-right */}
           {showGroupToggle && (
-            <div className="mb-1 flex justify-end">
-              <button
-                type="button"
-                onClick={() =>
-                  setGroupMode(groupMode === "status" ? "flat" : "status")
-                }
-                className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                aria-label={
-                  groupMode === "status"
-                    ? "Switch to flat list"
-                    : "Switch to grouped by status"
-                }
-                title={
-                  groupMode === "status" ? "Flat list" : "Group by status"
-                }
-              >
-                {groupMode === "status" ? (
-                  <List className="h-3.5 w-3.5" />
-                ) : (
-                  <ArrowUpDown className="h-3.5 w-3.5" />
-                )}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setGroupMode(groupMode === "status" ? "flat" : "status")
+              }
+              className="absolute right-3 top-2 z-10 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label={
+                groupMode === "status"
+                  ? "Switch to flat list"
+                  : "Switch to grouped by status"
+              }
+              title={
+                groupMode === "status" ? "Flat list" : "Group by status"
+              }
+            >
+              {groupMode === "status" ? (
+                <List className="h-3.5 w-3.5" />
+              ) : (
+                <ArrowUpDown className="h-3.5 w-3.5" />
+              )}
+            </button>
           )}
 
-          <div className="max-h-48 overflow-y-auto">
+          {/* pr-7 reserves space so check names truncate before the toggle button */}
+          <div className={cn("max-h-48 overflow-y-auto", showGroupToggle && "pr-7")}>
             {groupMode === "status" && showGroupToggle ? (
               <div className="space-y-1">
                 {groupOrder.map((state) => {
