@@ -55,7 +55,7 @@ import {
 import { FileSuggestionsDropdown } from "@/components/file-suggestions-dropdown";
 import { ImageAttachmentsPreview } from "@/components/image-attachments-preview";
 import { ModelSelectorCompact } from "@/components/model-selector-compact";
-import { QuestionPanel } from "@/components/question-panel";
+import { useInlineQuestion } from "@/components/inline-question-input";
 import { SlashCommandDropdown } from "@/components/slash-command-dropdown";
 import { AssistantMessageGroups } from "@/components/assistant-message-groups";
 import {
@@ -2304,6 +2304,18 @@ export function SessionChatContent({
     }
   }, [questionToolCallId, addToolOutput]);
 
+  // Inline question UI hook — renders question flow inside the prompt box
+  const inlineQuestion = useInlineQuestion({
+    questions:
+      hasPendingQuestion && pendingQuestionPart
+        ? pendingQuestionPart.input.questions
+        : [],
+    onSubmit: handleQuestionSubmit,
+    onCancel: handleQuestionCancel,
+    textareaValue: input,
+    onTextareaChange: setInput,
+  });
+
   const isReconnectingSandbox =
     reconnectionStatus === "checking" &&
     !sandboxInfo &&
@@ -3367,15 +3379,6 @@ export function SessionChatContent({
         )}
       </div>
 
-      {/* Question Panel */}
-      {hasPendingQuestion && pendingQuestionPart && (
-        <QuestionPanel
-          questions={pendingQuestionPart.input.questions}
-          onSubmit={handleQuestionSubmit}
-          onCancel={handleQuestionCancel}
-        />
-      )}
-
       {/* Input */}
       <div className="p-4 pb-2 sm:pb-8">
         <div className="mx-auto max-w-4xl space-y-2">
@@ -3461,11 +3464,18 @@ export function SessionChatContent({
             <PinnedTodoPanel todos={latestTodos} />
             {/* Input form */}
             <div
-              className={`overflow-hidden rounded-2xl bg-muted transition-colors ${isDragging ? "ring-2 ring-blue-500/50" : ""}`}
+              className={`overflow-hidden rounded-2xl bg-muted transition-colors ${isDragging ? "ring-2 ring-blue-500/50" : ""} ${inlineQuestion.isActive ? "ring-1 ring-primary/40" : ""}`}
             >
               <form
                 onSubmit={async (e) => {
                   e.preventDefault();
+
+                  // If we're in question mode, handle next/submit
+                  if (inlineQuestion.isActive) {
+                    inlineQuestion.handleNext();
+                    return;
+                  }
+
                   if (
                     isArchived ||
                     !isSandboxActive ||
@@ -3600,12 +3610,19 @@ export function SessionChatContent({
                   onRemove={removeImage}
                 />
 
+                {/* Inline question UI — renders above textarea when agent asks a question */}
+                {inlineQuestion.questionHeaderUI}
+
                 {/* Textarea area */}
                 <div className="px-4 pb-2 pt-3">
                   <textarea
                     ref={inputRef}
                     value={input}
-                    placeholder="Request changes or ask a question..."
+                    placeholder={
+                      inlineQuestion.isActive
+                        ? inlineQuestion.placeholder
+                        : "Request changes or ask a question..."
+                    }
                     rows={1}
                     onFocus={handleTextareaFocus}
                     onChange={(e) => {
@@ -3621,16 +3638,15 @@ export function SessionChatContent({
                         return;
                       }
                       // On iOS, Return should insert a newline (send via submit button)
-                      if (
-                        e.key === "Enter" &&
-                        !e.shiftKey &&
-                        !isIosDevice &&
-                        !isChatInFlight &&
-                        !hasPendingResponse
-                      ) {
-                        e.preventDefault();
-                        if (!isArchived && isSandboxActive) {
+                      if (e.key === "Enter" && !e.shiftKey && !isIosDevice) {
+                        if (inlineQuestion.isActive) {
+                          e.preventDefault();
                           e.currentTarget.form?.requestSubmit();
+                        } else if (!isChatInFlight && !hasPendingResponse) {
+                          e.preventDefault();
+                          if (!isArchived && isSandboxActive) {
+                            e.currentTarget.form?.requestSubmit();
+                          }
                         }
                       }
                     }}
@@ -3766,6 +3782,15 @@ export function SessionChatContent({
                         style={{ touchAction: "manipulation" }}
                       >
                         <Square className="h-3 w-3 fill-current" />
+                      </Button>
+                    ) : inlineQuestion.isActive ? (
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={!inlineQuestion.hasCurrentAnswer}
+                        className="h-8 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-30"
+                      >
+                        {inlineQuestion.buttonLabel}
                       </Button>
                     ) : (
                       <Tooltip>
