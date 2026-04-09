@@ -659,29 +659,22 @@ export function PreferencesSection() {
               disabled={isSaving}
             />
           </div>
-          <div className="flex items-center justify-between gap-4 pl-4">
-            <div className="space-y-1">
-              <Label
-                htmlFor="alert-sound-enabled"
-                className={
-                  !(preferences?.alertsEnabled ?? true)
-                    ? "text-muted-foreground"
-                    : undefined
-                }
-              >
-                Alert sound
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Play a sound when an alert is shown.
-              </p>
+          {(preferences?.alertsEnabled ?? true) && (
+            <div className="flex items-center justify-between gap-4 pl-4">
+              <div className="space-y-1">
+                <Label htmlFor="alert-sound-enabled">Alert sound</Label>
+                <p className="text-xs text-muted-foreground">
+                  Play a sound when an alert is shown.
+                </p>
+              </div>
+              <Switch
+                id="alert-sound-enabled"
+                checked={preferences?.alertSoundEnabled ?? true}
+                onCheckedChange={handleAlertSoundEnabledChange}
+                disabled={isSaving}
+              />
             </div>
-            <Switch
-              id="alert-sound-enabled"
-              checked={preferences?.alertSoundEnabled ?? true}
-              onCheckedChange={handleAlertSoundEnabledChange}
-              disabled={isSaving || !(preferences?.alertsEnabled ?? true)}
-            />
-          </div>
+          )}
         </div>
       </CardContent>
     </Card>
