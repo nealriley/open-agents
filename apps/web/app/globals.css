@@ -289,28 +289,6 @@
   --l-nav-bg: rgba(10, 10, 10, 0.95);
 }
 
-@keyframes landing-fade-up {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 14px, 0);
-    filter: blur(0.5px);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-    filter: blur(0);
-  }
-}
-
-.landing-fade-up {
-  animation: landing-fade-up 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .landing-fade-up {
-    animation: none;
-  }
-}
 
 .grain::before {
   content: "";

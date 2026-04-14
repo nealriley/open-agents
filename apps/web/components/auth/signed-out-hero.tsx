@@ -23,34 +23,26 @@ export function SignedOutHero() {
           <div className="mx-auto max-w-[1320px] px-6">
             <div className="max-w-[740px]">
               <h1
-                className="landing-fade-up text-4xl font-semibold leading-[1.03] tracking-tighter sm:text-5xl md:text-7xl"
-                style={{ animationDelay: "30ms" }}
+                className="text-4xl font-semibold leading-[1.03] tracking-tighter sm:text-5xl md:text-7xl"
               >
                 Open Agents.
               </h1>
               <p
-                className="landing-fade-up mt-4 text-balance text-base leading-relaxed text-(--l-fg-2) sm:mt-6 sm:text-lg"
-                style={{ animationDelay: "90ms" }}
+                className="mt-4 text-balance text-base leading-relaxed text-(--l-fg-2) sm:mt-6 sm:text-lg"
               >
                 Spawn coding agents that run infinitely in the cloud. Powered by
                 AI SDK, Gateway, Sandbox, and Workflow SDK.
               </p>
             </div>
 
-            <div
-              className="landing-fade-up mt-6 flex items-center gap-4 sm:mt-8"
-              style={{ animationDelay: "150ms" }}
-            >
+            <div className="mt-6 flex items-center gap-4 sm:mt-8">
               <SignInButton className="rounded-md border-0 bg-(--l-btn-bg) px-5 text-[13px] font-medium text-(--l-btn-fg) transition-colors hover:bg-(--l-btn-hover)" size="lg" />
               <GitHubLink>Open Source</GitHubLink>
             </div>
           </div>
 
           <div className="mx-auto mt-12 max-w-[1320px] px-4 sm:px-6 md:mt-20 md:px-0">
-            <div
-              className="landing-fade-up"
-              style={{ animationDelay: "240ms" }}
-            >
+            <div>
               <Stage tone="slate">
                 <div className="mx-auto w-full max-w-[1160px]">
                   <AppMockup />
